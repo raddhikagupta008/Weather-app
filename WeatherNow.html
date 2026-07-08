@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skyline — Weather</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1B1D3A;
+    --dusk:#5B4B8A;
+    --amber:#F2A65A;
+    --cream:#FBF6EC;
+    --slate:#8A8FA6;
+    --glass: rgba(251,246,236,0.08);
+    --glass-border: rgba(251,246,236,0.18);
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+
+  body{
+    min-height:100vh;
+    font-family:'Inter', sans-serif;
+    color:var(--cream);
+    background: linear-gradient(180deg, var(--ink) 0%, var(--dusk) 55%, #7C6BA8 100%);
+    transition: background 1.2s ease;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:32px;
+    overflow-x:hidden;
+    position:relative;
+  }
+
+  /* ambient horizon glow, shifts with weather via JS */
+  #glow{
+    position:fixed;
+    bottom:-20%;
+    left:50%;
+    transform:translateX(-50%);
+    width:140vw;
+    height:60vh;
+    background: radial-gradient(ellipse at center, var(--amber) 0%, transparent 70%);
+    opacity:0.25;
+    filter:blur(60px);
+    pointer-events:none;
+    transition: opacity 1.2s ease, background 1.2s ease;
+  }
+
+  .app{
+    position:relative;
+    z-index:1;
+    width:100%;
+    max-width:420px;
+  }
+
+  /* floating clouds */
+  .cloud{
+    position:fixed;
+    top:0;
+    opacity:0.5;
+    pointer-events:none;
+    z-index:0;
+    filter: blur(0.5px);
+  }
+
+  .cloud svg{ display:block; width:100%; height:100%; }
+
+  .cloud-1{
+    width:180px; height:70px;
+    top:8%; left:-200px;
+    animation: drift1 55s linear infinite;
+  }
+
+  .cloud-2{
+    width:120px; height:50px;
+    top:18%; left:-160px;
+    opacity:0.35;
+    animation: drift2 70s linear infinite;
+    animation-delay: -20s;
+  }
+
+  .cloud-3{
+    width:150px; height:60px;
+    top:5%; left:-190px;
+    opacity:0.25;
+    animation: drift1 90s linear infinite;
+    animation-delay: -45s;
+  }
+
+  @keyframes drift1{
+    from{ transform: translateX(0); }
+    to{ transform: translateX(calc(100vw + 200px)); }
+  }
+
+  @keyframes drift2{
+    from{ transform: translateX(0); }
+    to{ transform: translateX(calc(100vw + 160px)); }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .cloud{ animation: none !important; left:auto; right:10%; }
+  }
+
+  .eyebrow{
+    font-size:13px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--amber);
+    font-weight:600;
+    margin-bottom:10px;
+  }
+
+  h1{
+    font-family:'Fraunces', serif;
+    font-size:28px;
+    font-weight:600;
+    margin-bottom:24px;
+  }
+
+  .search{
+    display:flex;
+    gap:8px;
+    margin-bottom:28px;
+  }
+
+  .search input{
+    flex:1;
+    padding:14px 16px;
+    border-radius:12px;
+    border:1px solid var(--glass-border);
+    background:var(--glass);
+    color:var(--cream);
+    font-family:'Inter', sans-serif;
+    font-size:15px;
+    outline:none;
+  }
+
+  .search input::placeholder{ color:var(--slate); }
+  .search input:focus{ border-color:var(--amber); }
+
+  .search button{
+    padding:14px 20px;
+    border-radius:12px;
+    border:none;
+    background:var(--amber);
+    color:var(--ink);
+    font-weight:600;
+    font-size:14px;
+    cursor:pointer;
+    transition:transform 0.15s ease, background 0.15s ease;
+  }
+
+  .search button:hover{ transform:translateY(-1px); }
+  .search button:active{ transform:translateY(0); }
+
+  .card{
+    background:var(--glass);
+    border:1px solid var(--glass-border);
+    border-radius:20px;
+    padding:32px 28px;
+    backdrop-filter: blur(14px);
+    min-height:280px;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+  }
+
+  .state{
+    text-align:center;
+    color:var(--slate);
+    font-size:14px;
+  }
+
+  .result{ display:none; }
+  .result.visible{ display:block; }
+
+  .place-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    margin-bottom:4px;
+  }
+
+  .place{
+    font-size:16px;
+    font-weight:500;
+  }
+
+  .date{
+    font-size:12px;
+    color:var(--slate);
+  }
+
+  .condition{
+    font-size:13px;
+    color:var(--amber);
+    text-transform:capitalize;
+    margin-bottom:8px;
+  }
+
+  .temp-row{
+    display:flex;
+    align-items:flex-start;
+    gap:4px;
+    margin:8px 0 20px;
+  }
+
+  .temp{
+    font-family:'Fraunces', serif;
+    font-size:84px;
+    font-weight:600;
+    line-height:1;
+    letter-spacing:-0.02em;
+  }
+
+  .unit{
+    font-family:'Fraunces', serif;
+    font-size:28px;
+    margin-top:10px;
+    color:var(--amber);
+  }
+
+  .feels{
+    font-size:13px;
+    color:var(--slate);
+    margin-bottom:20px;
+  }
+
+  .divider{
+    height:1px;
+    background:var(--glass-border);
+    margin:20px 0;
+  }
+
+  .grid{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:16px;
+  }
+
+  .stat-label{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--slate);
+    margin-bottom:6px;
+  }
+
+  .stat-value{
+    font-family:'Fraunces', serif;
+    font-size:20px;
+    font-weight:600;
+  }
+
+  .error{
+    text-align:center;
+    color:#E8A0A0;
+    font-size:14px;
+  }
+
+  footer{
+    text-align:center;
+    font-size:12px;
+    color:var(--slate);
+    margin-top:20px;
+  }
+</style>
+</head>
+<body>
+
+<div id="glow"></div>
+
+<div class="cloud cloud-1">
+  <svg viewBox="0 0 200 80" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="60" cy="50" rx="45" ry="25" fill="#FBF6EC"/>
+    <ellipse cx="100" cy="35" rx="35" ry="30" fill="#FBF6EC"/>
+    <ellipse cx="135" cy="50" rx="40" ry="22" fill="#FBF6EC"/>
+  </svg>
+</div>
+<div class="cloud cloud-2">
+  <svg viewBox="0 0 200 80" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="60" cy="50" rx="45" ry="25" fill="#FBF6EC"/>
+    <ellipse cx="100" cy="35" rx="35" ry="30" fill="#FBF6EC"/>
+    <ellipse cx="135" cy="50" rx="40" ry="22" fill="#FBF6EC"/>
+  </svg>
+</div>
+<div class="cloud cloud-3">
+  <svg viewBox="0 0 200 80" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="60" cy="50" rx="45" ry="25" fill="#FBF6EC"/>
+    <ellipse cx="100" cy="35" rx="35" ry="30" fill="#FBF6EC"/>
+    <ellipse cx="135" cy="50" rx="40" ry="22" fill="#FBF6EC"/>
+  </svg>
+</div>
+
+<div class="app">
+  <div class="eyebrow">Right now</div>
+  <h1>WeatherNow</h1>
+
+  <div class="search">
+    <input id="cityInput" type="text" placeholder="Search a city…" value="Mumbai">
+    <button id="searchBtn">Search</button>
+  </div>
+
+  <div class="card" id="card">
+    <div class="state" id="stateMsg">Type a city and hit search.</div>
+
+    <div class="result" id="result">
+      <div class="place-row">
+        <span class="place" id="placeName">—</span>
+        <span class="date" id="dateNow">—</span>
+      </div>
+      <div class="condition" id="condition">—</div>
+
+      <div class="temp-row">
+        <span class="temp" id="temp">—</span>
+        <span class="unit">°C</span>
+      </div>
+
+      <div class="feels" id="feels">—</div>
+
+      <div class="divider"></div>
+
+      <div class="grid">
+        <div>
+          <div class="stat-label">Humidity</div>
+          <div class="stat-value" id="humidity">—</div>
+        </div>
+        <div>
+          <div class="stat-label">Wind</div>
+          <div class="stat-value" id="wind">—</div>
+        </div>
+        <div>
+          <div class="stat-label">Pressure</div>
+          <div class="stat-value" id="pressure">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>Data via OpenWeatherMap</footer>
+</div>
+
+<script>
+  // ==== PASTE YOUR FREE API KEY HERE ====
+  const API_KEY = "d2131f8141261c30a98bf4ad61e66780";
+  // Get one free at https://openweathermap.org/api
+
+  const cityInput = document.getElementById('cityInput');
+  const searchBtn = document.getElementById('searchBtn');
+  const stateMsg = document.getElementById('stateMsg');
+  const result = document.getElementById('result');
+  const glow = document.getElementById('glow');
+  const body = document.body;
+
+  const moods = {
+    Clear:   { bg: "linear-gradient(180deg, #1B1D3A 0%, #5B4B8A 55%, #F2A65A 120%)", glow: "#F2A65A" },
+    Clouds:  { bg: "linear-gradient(180deg, #1B1D3A 0%, #4A4E6B 60%, #8A8FA6 130%)", glow: "#8A8FA6" },
+    Rain:    { bg: "linear-gradient(180deg, #12132B 0%, #2E3352 60%, #4A5A78 130%)", glow: "#4A90A4" },
+    Drizzle: { bg: "linear-gradient(180deg, #12132B 0%, #2E3352 60%, #4A5A78 130%)", glow: "#4A90A4" },
+    Thunderstorm: { bg: "linear-gradient(180deg, #0B0C1E 0%, #23263F 60%, #3A3A5C 130%)", glow: "#8A6BD8" },
+    Snow:    { bg: "linear-gradient(180deg, #1B1D3A 0%, #6B7A94 60%, #D8DEE9 130%)", glow: "#D8DEE9" },
+    default: { bg: "linear-gradient(180deg, #1B1D3A 0%, #5B4B8A 55%, #7C6BA8 130%)", glow: "#F2A65A" }
+  };
+
+  function applyMood(main){
+    const mood = moods[main] || moods.default;
+    body.style.background = mood.bg;
+    glow.style.background = `radial-gradient(ellipse at center, ${mood.glow} 0%, transparent 70%)`;
+  }
+
+  async function getWeather(city){
+    stateMsg.style.display = 'block';
+    stateMsg.textContent = 'Fetching sky data…';
+    result.classList.remove('visible');
+
+    if(API_KEY === "YOUR_API_KEY_HERE"){
+      stateMsg.textContent = "Add your OpenWeatherMap API key in the script to activate this.";
+      return;
+    }
+
+    try{
+      const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&units=metric&appid=${API_KEY}`;
+      const res = await fetch(url);
+
+      if(!res.ok){
+        if(res.status === 404) throw new Error("City not found. Check the spelling and try again.");
+        throw new Error("Something went wrong fetching the weather.");
+      }
+
+      const data = await res.json();
+      renderWeather(data);
+
+    }catch(err){
+      stateMsg.style.display = 'block';
+      stateMsg.innerHTML = `<span class="error">${err.message}</span>`;
+      result.classList.remove('visible');
+    }
+  }
+
+  function renderWeather(data){
+    document.getElementById('placeName').textContent = `${data.name}, ${data.sys.country}`;
+    document.getElementById('dateNow').textContent = new Date().toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+    document.getElementById('condition').textContent = data.weather[0].description;
+    document.getElementById('temp').textContent = Math.round(data.main.temp);
+    document.getElementById('feels').textContent = `Feels like ${Math.round(data.main.feels_like)}°C`;
+    document.getElementById('humidity').textContent = `${data.main.humidity}%`;
+    document.getElementById('wind').textContent = `${Math.round(data.wind.speed * 3.6)} km/h`;
+    document.getElementById('pressure').textContent = `${data.main.pressure} hPa`;
+
+    applyMood(data.weather[0].main);
+
+    stateMsg.style.display = 'none';
+    result.classList.add('visible');
+  }
+
+  searchBtn.addEventListener('click', () => {
+    const city = cityInput.value.trim();
+    if(city) getWeather(city);
+  });
+
+  cityInput.addEventListener('keypress', (e) => {
+    if(e.key === 'Enter'){
+      const city = cityInput.value.trim();
+      if(city) getWeather(city);
+    }
+  });
+
+  // auto-load default city on first visit
+  getWeather(cityInput.value);
+</script>
+
+</body>
+</html>
